@@ -1,0 +1,20 @@
+# Dataset foto asli (Data sensitif biometrik & file besar)
+bahan/
+face_recognition_output/
+
+# Python cache & compiled
+__pycache__/
+*.py[cod]
+*$py.class
+*.pkl
+*.npy
+
+# Temporary files
+*.tmp
+*.log
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
