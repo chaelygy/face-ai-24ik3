@@ -617,42 +617,59 @@ function smoothResults(buffer) {
     if (latestFrame.length === 0) return [];
 
     return latestFrame.map(currentFace => {
-        // Cari wajah yang cocok di frame-frame sebelumnya (berdasarkan IoU box)
+        // Cari wajah yang cocok di frame-frame sebelumnya (berdasarkan IoU box atau kedekatan posisi)
         const nameVotes = {};
-        const confidences = [];
+        const knownConfidences = [];
+        const allConfidences = [];
 
         for (const frame of buffer) {
             for (const face of frame) {
                 const iou = computeIoU(currentFace.box, face.box);
-                if (iou > 0.3) {  // Wajah yang sama jika IoU > 30%
+                if (iou > 0.25) {
                     nameVotes[face.name] = (nameVotes[face.name] || 0) + 1;
-                    confidences.push(face.confidence);
+                    allConfidences.push(face.confidence);
+                    if (!face.isUnknown && face.name !== 'Tidak Dikenal') {
+                        knownConfidences.push(face.confidence);
+                    }
                 }
             }
         }
 
-        // Ambil nama dengan vote terbanyak
-        let bestName = currentFace.name;
-        let maxVotes = 0;
+        // Cari nama teman yang paling sering muncul
+        let bestKnownName = null;
+        let maxKnownVotes = 0;
+
         for (const [name, votes] of Object.entries(nameVotes)) {
-            if (votes > maxVotes) {
-                maxVotes = votes;
-                bestName = name;
+            if (name !== 'Tidak Dikenal' && votes > maxKnownVotes) {
+                maxKnownVotes = votes;
+                bestKnownName = name;
             }
         }
 
-        // Hanya tampilkan nama jika konsisten di > 50% frame
-        const totalFrames = buffer.length;
-        const isConsistent = maxVotes >= Math.ceil(totalFrames * 0.5);
+        // Jika terdeteksi sebagai teman sekelas di minimal 2 frame terakhir, kunci ke nama teman tersebut!
+        let finalName = currentFace.name;
+        let finalUnknown = currentFace.isUnknown;
+        let finalConf = currentFace.confidence;
+
+        if (bestKnownName && maxKnownVotes >= 2) {
+            finalName = bestKnownName;
+            finalUnknown = false;
+            finalConf = knownConfidences.length > 0 
+                ? knownConfidences.reduce((a, b) => a + b) / knownConfidences.length 
+                : currentFace.confidence;
+        } else if (currentFace.isUnknown) {
+            finalName = 'Tidak Dikenal';
+            finalUnknown = true;
+            finalConf = allConfidences.length > 0
+                ? allConfidences.reduce((a, b) => a + b) / allConfidences.length
+                : currentFace.confidence;
+        }
 
         return {
             ...currentFace,
-            name: isConsistent ? bestName : 'Tidak Dikenal',
-            confidence: confidences.length > 0
-                ? confidences.reduce((a, b) => a + b) / confidences.length
-                : currentFace.confidence,
-            isUnknown: !isConsistent || bestName === 'Tidak Dikenal',
-            consistency: maxVotes / totalFrames
+            name: finalName,
+            confidence: Math.max(0.15, finalConf),
+            isUnknown: finalUnknown
         };
     });
 }
